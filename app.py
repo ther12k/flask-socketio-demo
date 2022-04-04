@@ -1,3 +1,8 @@
+
+from gevent import monkey
+monkey.patch_all()
+from requests.exceptions import Timeout
+
 from threading import Lock
 from flask import Flask, render_template, session
 from flask_socketio import SocketIO, emit
@@ -6,14 +11,14 @@ import requests
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
 # the best option based on installed packages.
-async_mode = None
+async_mode = 'gevent'
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode=async_mode)
 thread = None
 thread_lock = Lock()
 
-url = 'https://api.coinbase.com/v2/prices/btc-usd/spot'
+url = 'https://api.coinstats.app/public/v1/coins/bitcoin?currency=BTC'
 
 def background_thread():
     """Example of how to send server generated events to clients."""
@@ -21,9 +26,17 @@ def background_thread():
     while True:
         socketio.sleep(3)
         count += 1
-        price = ((requests.get(url)).json())['data']['amount']
+        print('request '+url)
+        try:
+            req = requests.get(url,verify=False, timeout=(2,5))
+        except Timeout:
+            print('Timeout has been raised.')
+        print('wait...')
+        req.raise_for_status()
+        price = ((req).json())['coin']['price']
+        print(price)
         socketio.emit('my_response',
-                      {'data': 'Bitcoin current price (USD): ' + price, 'count': count})
+                      {'data': 'Bitcoin current price (USD): ' + str(price),'count':count})
 
 @app.route('/')
 def index():
@@ -56,4 +69,5 @@ def connect():
     emit('my_response', {'data': 'Connected', 'count': 0})
 
 if __name__ == '__main__':
+    
     socketio.run(app)
